@@ -13,9 +13,9 @@ if __name__ == "__main__":
     while(True):
         # Capture frame-by-frame
         ret, in_frame = cap.read()
-        out_frame = process_frame(in_frame)
+        out_frame = process_frame(in_frame,True)
         cv2.imshow('out_frame',out_frame)
-        key = cv2.waitKey(1)
+        key = cv2.waitKey(0)
         if key == 27:
             break
 
