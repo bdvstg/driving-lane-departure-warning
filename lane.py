@@ -373,38 +373,6 @@ def window_search(left_fit, right_fit, binary_warped, margin=100, visualization=
 
     return left_fit, right_fit
 
-
-def measure_lane_curvature(ploty, leftx, rightx, visualization=False):
-
-    leftx = leftx[::-1]  # Reverse to match top-to-bottom in y
-    rightx = rightx[::-1]  # Reverse to match top-to-bottom in y
-
-     # choose the maximum y-value, corresponding to the bottom of the image
-    y_eval = np.max(ploty)
-
-    # Define conversions in x and y from pixels space to meters
-    ym_per_pix = 30/(frame_height/input_scale) # meters per pixel in y dimension
-    xm_per_pix = LANEWIDTH/(700/input_scale) # meters per pixel in x dimension
-
-    # Fit new polynomials to x,y in world space
-    left_fit_cr = np.polyfit(ploty*ym_per_pix, leftx*xm_per_pix, 2)
-    right_fit_cr = np.polyfit(ploty*ym_per_pix, rightx*xm_per_pix, 2)
-    # Calculate the new radii of curvature
-    left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
-    right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-    # Now our radius of curvature is in meters
-    # print(left_curverad, 'm', right_curverad, 'm')
-
-    if leftx[0] - leftx[-1] > 50/input_scale:
-        curve_direction = 'Left curve'
-    elif leftx[-1] - leftx[0] > 50/input_scale:
-        curve_direction = 'Right curve'
-    else:
-        curve_direction = 'Straight'
-
-    return (left_curverad+right_curverad)/2.0, curve_direction
-
-
 def off_center(left, mid, right):
     """
 
@@ -444,79 +412,41 @@ def compute_car_offcenter(ploty, left_fitx, right_fitx, undist):
     return offcenter, pts
 
 
-def create_output_frame(offcenter, pts, undist_ori, fps, curvature, curve_direction, binary_sub, threshold=0.6):
+def create_output_frame(offcenter, pts, undist_ori, threshold=0.6):
     """
 
     :param offcenter:
     :param pts:
     :param undist_ori:
-    :param fps:
     :param threshold:
     :return:
     """
 
-    undist_ori = cv2.resize(undist_ori, (0,0), fx=1/output_frame_scale, fy=1/output_frame_scale)
-    w = undist_ori.shape[1]
-    h = undist_ori.shape[0]
+    cv2.imshow("undist_ori1", undist_ori)
 
-    undist_birdview = warper(cv2.resize(undist_ori, (0,0), fx=1/2, fy=1/2), M_b)
+    undist_ori2 = cv2.resize(undist_ori, (0,0), fx=1/output_frame_scale, fy=1/output_frame_scale)
 
-    color_warp = np.zeros_like(undist_ori).astype(np.uint8)
-
-    # create a frame to hold every image
-    whole_frame = np.zeros((int(h*2.5),int(w*2.34), 3), dtype=np.uint8)
-
+    color_warp = np.zeros_like(undist_ori2).astype(np.uint8)
 
     if abs(offcenter) > threshold:  # car is offcenter more than 0.6 m
         # Draw Red lane
         cv2.fillPoly(color_warp, np.int_([pts]), (255, 0, 0)) # red
     else: # Draw Green lane
         cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))  # green
+    cv2.imshow("color_warp", color_warp)
 
     newwarp = cv2.warpPerspective(color_warp, M_inv, (int(frame_width/input_scale), int(frame_height/input_scale)))
+    cv2.imshow("newwarp", newwarp)
 
     # Combine the result with the original image    # result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
 
     newwarp_ = cv2.resize(newwarp,None, fx=input_scale/output_frame_scale, fy=input_scale/output_frame_scale, interpolation = cv2.INTER_LINEAR)
 
-    output = cv2.addWeighted(undist_ori, 1, newwarp_, 0.3, 0)
+    output = cv2.addWeighted(undist_ori2, 1, newwarp_, 0.3, 0)
+    cv2.imshow("undist_ori2", undist_ori2)
+    cv2.imshow("output", output)
 
-    ############## generate the combined output frame only for visualization purpose ################
-    whole_frame[40:40+h, 20:20+w, :] = undist_ori
-    whole_frame[40:40+h, 60+w:60+2*w, :] = output
-    whole_frame[220+int(h/2):220+int(2*h/2), 20:20+int(w/2), :] = undist_birdview
-    whole_frame[220+int(h/2):220+int(2*h/2), 40+int(w/2):40+w, 0] = cv2.resize((binary_sub*255).astype(np.uint8), (0,0), fx=1/2, fy=1/2)
-    whole_frame[220+int(h/2):220+int(2*h/2), 40+int(w/2):40+w, 1] = cv2.resize((binary_sub*255).astype(np.uint8), (0,0), fx=1/2, fy=1/2)
-    whole_frame[220+int(h/2):220+int(2*h/2), 40+int(w/2):40+w, 2] = cv2.resize((binary_sub*255).astype(np.uint8), (0,0), fx=1/2, fy=1/2)
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    if offcenter >= 0:
-        offset = offcenter
-        direction = 'Right'
-    elif offcenter < 0:
-        offset = -offcenter
-        direction = 'Left'
-
-    info_road = "Road Status"
-    info_lane = "Lane info: {0}".format(curve_direction)
-    info_cur = "Curvature {:6.1f} m".format(curvature)
-    info_offset = "Off center: {0} {1:3.1f}m".format(direction, offset)
-    info_framerate = "{0:4.1f} fps".format(fps)
-    info_warning = "Warning: offcenter > 0.6m (use higher threshold in real life)"
-
-    cv2.putText(whole_frame, "Departure Warning System with a Monocular Camera", (23,25), font, 0.8, (255,255,0), 1, cv2.LINE_AA)
-    cv2.putText(whole_frame, "Origin", (22,70), font, 0.6, (255,255,0), 1, cv2.LINE_AA)
-    cv2.putText(whole_frame, "Augmented", (40+w+25,70), font, 0.6, (255,255,0), 1, cv2.LINE_AA)
-    cv2.putText(whole_frame, "Bird's View", (22+30,70+35+h), font, 0.6, (255,255,0), 1, cv2.LINE_AA)
-    cv2.putText(whole_frame, "Lanes", (22+225,70+35+h), font, 0.6, (255,255,0), 1, cv2.LINE_AA)
-    cv2.putText(whole_frame, info_road, (40+w+50,70+35+h), font, 0.8, (255,255,0), 1,cv2.LINE_AA)
-    cv2.putText(whole_frame, info_warning, (35+w,60+h), font, 0.4, (255,255,0), 1,cv2.LINE_AA)
-    cv2.putText(whole_frame, info_lane, (40+w+50,70+35+40+h), font, 0.8, (255,255,0), 1,cv2.LINE_AA)
-    cv2.putText(whole_frame, info_cur, (40+w+50,70+35+80+h), font, 0.8, (255,255,0), 1,cv2.LINE_AA)
-    cv2.putText(whole_frame, info_offset, (40+w+50,70+35+120+h), font, 0.8, (255,255,0), 1,cv2.LINE_AA)
-    cv2.putText(whole_frame, info_framerate, (40+w+250,70), font, 0.6, (255,255,0), 1,cv2.LINE_AA)
-
-    return whole_frame
+    return output
 
 
 def tracker(binary_sub, ploty, visualization=False):
@@ -575,7 +505,6 @@ def detector(binary_sub, ploty, visualization=False):
 
 def process_frame(img, visualization=False):
 
-    start = timer()
     # resize the input image according to scale
     img_undist_ = cv2.undistort(img, mtx, dist, None, mtx)
     img_undist = cv2.resize(img_undist_, (0,0), fx=1/input_scale, fy=1/input_scale)
@@ -589,6 +518,7 @@ def process_frame(img, visualization=False):
     # crop the binary image
     binary_sub = np.zeros_like(binary_warped)
     binary_sub[:, int(150/input_scale):int(-80/input_scale)]  = binary_warped[:, int(150/input_scale):int(-80/input_scale)]
+    cv2.imshow("binary_sub", binary_sub)
 
     # start detector or tracker to find the lanes
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
@@ -601,16 +531,9 @@ def process_frame(img, visualization=False):
     left_lane.process(ploty)
     right_lane.process(ploty)
 
-    # measure the lane curvature
-    curvature, curve_direction = measure_lane_curvature(ploty, left_lane.mean_fitx, right_lane.mean_fitx)
-
     # compute the car's off-center in meters
     offcenter, pts = compute_car_offcenter(ploty, left_lane.mean_fitx, right_lane.mean_fitx, img_undist)
 
-    # compute the processing frame rate
-    end = timer()
-    fps = 1.0 / (end - start)
-
     # combine all images into final video output (only for visualization purpose)
-    output = create_output_frame(offcenter, pts, img_undist_, fps, curvature, curve_direction, binary_sub)
+    output = create_output_frame(offcenter, pts, img_undist_)
     return output
