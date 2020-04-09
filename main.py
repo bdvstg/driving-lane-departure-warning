@@ -4,14 +4,12 @@ __author__ = "Junsheng Fu"
 __email__ = "junsheng.fu@yahoo.com"
 __date__ = "March 2017"
 
-
+import cv2
 from lane import *
-from moviepy.editor import VideoFileClip
-
 
 if __name__ == "__main__":
 
-    demo = 1 # 1: image, 2 video
+    demo = 2 # 1: image, 2 video
 
     if demo == 1:
         imagepath = 'examples/test3.jpg'
@@ -28,9 +26,16 @@ if __name__ == "__main__":
         plt.show()
 
     else:
-        video_output = 'examples/project_video_augmented.mp4'
-        clip1 = VideoFileClip("examples/project_video.mp4")
+        cap = cv2.VideoCapture("examples/project_video.mp4")
+        while(True):
+            # Capture frame-by-frame
+            ret, in_frame = cap.read()
+            out_frame = process_frame(in_frame)
+            cv2.imshow('out_frame',out_frame)
+            key = cv2.waitKey(1)
+            if key == 27:
+                break
 
-        clip = clip1.fl_image(process_frame) #NOTE: it should be in BGR format
-        clip.write_videofile(video_output, audio=False)
-
+        # When everything done, release the capture
+        cap.release()
+        cv2.destroyAllWindows()
